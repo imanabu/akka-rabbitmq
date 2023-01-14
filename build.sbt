@@ -14,11 +14,11 @@ crossScalaVersions := Seq("2.13.6", "2.12.12", "3.1.0")
 def akka(name: String): ModuleID = "com.typesafe.akka" %% s"akka-$name" % "2.6.16"
 
 libraryDependencies ++= Seq(
-  "com.rabbitmq" % "amqp-client" % "5.13.1",
+  "com.rabbitmq" % "amqp-client" % "5.16.0",
   akka("actor") % "provided",
   akka("testkit") % "test",
-  "com.typesafe" % "config" % "1.4.1" % Test,
-  ("org.specs2" %% "specs2-mock" % "4.13.0" % Test).cross(CrossVersion.for3Use2_13)
+  "com.typesafe" % "config" % "1.4.2" % Test,
+  ("org.specs2" %% "specs2-mock" % "4.17.0" % Test).cross(CrossVersion.for3Use2_13)
 )
 
 Format.settings
