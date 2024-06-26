@@ -81,14 +81,14 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
         case None => goto(Connected) using Connected(channel)
         case Some(onChannel) =>
           val res = safeWithRetry(channel, onChannel)
-          log.debug("{} queued message {} resulted in {}", header(Disconnected, channel), onChannel, res)
+          log.debug("[MQ][A]  {} queued message {} resulted in {}", header(Disconnected, channel), onChannel, res)
           res match {
             case ProcessSuccess(_) => loop(qs.tail)
             case ProcessFailureRetry(retry) =>
               dropChannelAndRequestNewChannel(channel)
               stay() using InMemory(retry +: qs.tail)
             case ProcessFailureDrop =>
-              log.warning("{} stopped retrying message {}", header(Disconnected, channel), onChannel)
+              log.warning("[MQ][A]  {} stopped retrying message {}", header(Disconnected, channel), onChannel)
               dropChannelAndRequestNewChannel(channel)
               stay() using InMemory(qs.tail)
           }
@@ -106,10 +106,10 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
 
     case Event(msg @ ChannelMessage(onChannel, dropIfNoChannel), InMemory(queue)) =>
       if (dropIfNoChannel) {
-        log.debug("{} dropping message {}", header(Disconnected, msg), onChannel)
+        log.debug("[MQ][A]  {} dropping message {}", header(Disconnected, msg), onChannel)
         stay()
       } else {
-        log.debug("{} queueing message {}", header(Disconnected, msg), onChannel)
+        log.debug("[MQ][A]  {} queueing message {}", header(Disconnected, msg), onChannel)
         stay() using InMemory(queue enqueue onChannel)
       }
 
@@ -118,7 +118,7 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
 
   when(Connected) {
     case Event(channel: Channel, Connected(_)) =>
-      log.debug("{} closing unexpected channel {}", header(Connected, channel), channel)
+      log.debug("[MQ][A]  {} closing unexpected channel {}", header(Connected, channel), channel)
       close(channel)
       stay()
 
@@ -130,14 +130,14 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
           Some(dropChannelAndRequestNewChannel _)
         case _ => None
       }).fold(stay()) { shutdownAction =>
-        log.debug("{} shutdown", header(Connected, msg))
+        log.debug("[MQ][A]  {} shutdown", header(Connected, msg))
         shutdownAction(channel)
         goto(Disconnected) using InMemory()
       }
 
     case Event(msg @ ChannelMessage(onChannel, _), Connected(channel)) =>
       val res = safeWithRetry(channel, onChannel)
-      log.debug("{} received channel message resulted in {}", header(Connected, msg), res)
+      log.debug("[MQ][A]  {} received channel message resulted in {}", header(Connected, msg), res)
       res match {
         case ProcessSuccess(_) => stay()
         case ProcessFailureRetry(retry) if !msg.dropIfNoChannel =>
@@ -145,7 +145,7 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
           goto(Disconnected) using InMemory(Queue(retry))
         case _ =>
           if (!msg.dropIfNoChannel) {
-            log.warning("{} not retrying message {}", header(Connected, msg), onChannel)
+            log.warning("[MQ][A]  {} not retrying message {}", header(Connected, msg), onChannel)
           }
           dropChannelAndRequestNewChannel(channel)
           goto(Disconnected) using InMemory()
@@ -159,13 +159,13 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
   }
 
   onTransition {
-    case Disconnected -> Connected => log.info("{} connected", self.path)
-    case Connected -> Disconnected => log.warning("{} disconnected", self.path)
+    case Disconnected -> Connected => log.warning("[MQ][A]  {} connected", self.path)
+    case Connected -> Disconnected => log.warning("[MQ][A]  {} disconnected", self.path)
   }
 
   onTermination {
     case StopEvent(_, Connected, Connected(channel)) =>
-      log.debug("{} closing channel {}", self.path, channel)
+      log.debug("[MQ][A]  {} closing channel {}", self.path, channel)
       close(channel)
   }
 
@@ -173,12 +173,12 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
 
   private def setup(channel: Channel): Boolean = {
     channel.addShutdownListener(this)
-    log.debug("{} setting up new channel {}", self.path, channel)
+    log.debug("[MQ][A]  {} setting up new channel {}", self.path, channel)
     try {
       safe(setupChannel(channel, self)).isDefined
     } catch {
       case NonFatal(throwable) =>
-        log.debug("{} setup channel callback error {}", self.path, channel)
+        log.debug("[MQ][A]  {} setup channel callback error {}", self.path, channel)
         close(channel)
         throw throwable
     }
@@ -190,12 +190,12 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
   }
 
   private def dropChannel(brokenChannel: Channel): Unit = {
-    log.debug("{} closing broken channel {}", self.path, brokenChannel)
+    log.debug("[MQ][A]  {} closing broken channel {}", self.path, brokenChannel)
     close(brokenChannel)
   }
 
   private def askForChannel(): Unit = {
-    log.debug("{} asking for new channel", self.path)
+    log.debug("[MQ][A]  {} asking for new channel", self.path)
     connectionActor ! ProvideChannel
   }
 
