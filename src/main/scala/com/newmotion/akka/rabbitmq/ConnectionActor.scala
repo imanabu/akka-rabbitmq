@@ -167,12 +167,12 @@ class ConnectionActor(
 
   private def reconnect(connection: Connection, msg: Any): Unit = {
     def dropConnectionAndNotifyChildren(): Unit = {
-      log.warning("[MQ][A]  {} closing broken connection {}", header(Connected,
+      log.warning("[MQ][A]  {} closing broken connection {}", header(
+        Connected,
         msg), connection)
       close(connection)
 
-      log.warning("[MQ][A]  {} sending shutdown signal to {} children", header
-      (Connected, msg), children.size)
+      log.warning("[MQ][A]  {} sending shutdown signal to {} children", header(Connected, msg), children.size)
       children.foreach(_ ! ParentShutdownSignal)
     }
 
