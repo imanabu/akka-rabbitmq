@@ -24,7 +24,7 @@ trait RabbitMqActor extends Actor with ShutdownListener {
     case Success(_) =>
       log.debug("[MQ][A]  close success")
     case Failure(throwable) =>
-      log.error("close {}", throwable)
+      log.error("[MQ][A] Exception on close {}", throwable)
   }
 
   def safe[T](f: => T): Option[T] = Try {
