@@ -68,6 +68,7 @@ class ConnectionActor(
     case Event(Connect, _) =>
       setup().onComplete {
         case Success(Some(connection)) =>
+          log.info("[MQ][A][Disconnected] Success - New Connection Created")
           self ! NewConnection(connection)
         case _ =>
           log.error(
@@ -79,13 +80,15 @@ class ConnectionActor(
       stay()
 
     case Event(msg @ NewConnection(connection), _) =>
-      log.debug("[MQ][A]  {} setup {} children", header(Disconnected, msg), children.size)
+      log.info("[MQ][A][Disconnected]  {} setup {} children", header(Disconnected, msg),
+        children.size)
       self ! SetupChildren(children)
       goto(Connected) using Connected(connection)
 
     case Event(msg @ CreateChannel(props, name), _) =>
       val child = newChild(props, name)
-      log.debug("[MQ][A]  {} creating child {} in disconnected state", header(Disconnected, msg), child)
+      log.info("[MQ][A][Disconnected]  {} creating child {} in disconnected " +
+        "state", header(Disconnected, msg), child)
       stay() replying ChannelCreated(child)
 
     case Event(_: AmqpShutdownSignal, _) => stay()
@@ -93,7 +96,8 @@ class ConnectionActor(
     case Event(_: Reconnect, _)          => stay()
 
     case Event(ProvideChannel, _) =>
-      log.error("[MQ][A]  {} can't create channel for {} in disconnected " +
+      log.error("[MQ][A][Disconnected]  {} can't create channel for {} in " +
+        "disconnected " +
         "state", header(Disconnected, ProvideChannel), sender())
       stay()
   }
@@ -102,9 +106,9 @@ class ConnectionActor(
     case Event(SetupChildren(refs), Connected(connection)) =>
       setupChildren(connection, refs).onComplete {
         case Success(true) =>
-          log.info("[MQ][A]  {} setup children success", self.path)
+          log.info("[MQ][A][Connected]  {} setup children success", self.path)
         case _ =>
-          log.error("{} setup children failed", self.path)
+          log.error("[MQ][A][Connected] {} setup children failed", self.path)
           self ! Reconnect(connection)
       }
       stay()
@@ -113,10 +117,15 @@ class ConnectionActor(
       // Check the connection id to guard against Reconnect messages
       // still queued in the mailbox during the previous connection.
       if (oldConnection.getId == connection.getId) {
+        log.warning("[MQ][A]  {} reconnect to the same ID {}", header(
+          Connected,
+          msg), factory.uri)
         reconnect(connection, msg)
         goto(Disconnected) using NoConnection
       } else {
-        log.debug("[MQ][A]  {} already reconnected to {}", header(Connected, msg), factory.uri)
+        log.debug(
+          "[MQ][A]  {} already reconnected to {}",
+          header(Connected, msg), factory.uri)
         stay()
       }
 
@@ -132,7 +141,9 @@ class ConnectionActor(
     case Event(msg @ AmqpShutdownSignal(cause), Connected(connection)) =>
       // It is important that we check if a shutdown signal pertains to the current connection.
       if (msg.appliesTo(connection)) {
-        log.debug("[MQ][A]  {} shutdown (initiated by app {})", header(Connected, msg), cause.isInitiatedByApplication)
+        log.info("[MQ][A]  {} shutdown (initiated by app {})", header(
+          Connected,
+          msg), cause.isInitiatedByApplication)
         reconnect(connection, msg)
         goto(Disconnected) using NoConnection
       } else stay()
@@ -144,7 +155,7 @@ class ConnectionActor(
       stay()
 
     case Event(msg @ DeadLetter(channel: Channel, `self`, child), _) =>
-      log.debug("[MQ][A]  {} closing channel {} of child {}", header(stateName, msg), channel, child)
+      log.warning("[MQ][A]  {} closing channel {} of child {}", header(stateName, msg), channel, child)
       close(channel)
       stay()
 
@@ -167,12 +178,12 @@ class ConnectionActor(
 
   private def reconnect(connection: Connection, msg: Any): Unit = {
     def dropConnectionAndNotifyChildren(): Unit = {
-      log.warning("[MQ][A]  {} closing broken connection {}", header(Connected,
+      log.warning("[MQ][A]  {} closing broken connection {}", header(
+        Connected,
         msg), connection)
       close(connection)
 
-      log.warning("[MQ][A]  {} sending shutdown signal to {} children", header
-      (Connected, msg), children.size)
+      log.warning("[MQ][A]  {} sending shutdown signal to {} children", header(Connected, msg), children.size)
       children.foreach(_ ! ParentShutdownSignal)
     }
 
@@ -191,16 +202,18 @@ class ConnectionActor(
     Future {
       blocking {
         factory.setAutomaticRecoveryEnabled(false)
-        log.debug("[MQ][A]  {} creating new connection", self.path)
+        log.debug("[MQ][A] setup() {} creating new connection", self.path)
         safe(factory.newConnection()).flatMap { connection =>
           cancelTimer(reconnectTimer)
           connection.addShutdownListener(this)
-          log.debug("[MQ][A]  {} setting up new connection {}", self.path, connection)
+          log.debug("[MQ][A] setup() {} setting up new connection {}", self
+            .path, connection)
           try {
             safe(setupConnection(connection, self)).map(_ => connection)
           } catch {
             case NonFatal(throwable) =>
-              log.debug("[MQ][A]  {} setup connection callback error {}", self.path, connection)
+              log.debug("[MQ][A] setup()  {} setup connection callback error " +
+                "{}", self.path, connection)
               close(connection)
               throw throwable
           }
