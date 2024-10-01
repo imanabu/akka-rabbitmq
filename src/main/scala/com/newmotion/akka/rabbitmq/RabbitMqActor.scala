@@ -14,7 +14,7 @@ trait RabbitMqActor extends Actor with ShutdownListener {
   def log: LoggingAdapter
 
   def shutdownCompleted(cause: ShutdownSignalException): Unit = {
-    log.info("[MQ][A]  on shutdownCompleted {}", cause)
+    log.info("[MQ][A] shutdownCompleted cause={}", cause)
     self ! AmqpShutdownSignal(cause)
   }
 
@@ -22,7 +22,7 @@ trait RabbitMqActor extends Actor with ShutdownListener {
     x.close()
   } match {
     case Success(_) =>
-      log.info("[MQ][A]  close success")
+      log.info("[MQ][A] Close success")
     case Failure(throwable) =>
       log.error("[MQ][A] Exception on close {}", throwable)
   }
