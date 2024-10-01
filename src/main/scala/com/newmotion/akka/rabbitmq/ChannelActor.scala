@@ -117,7 +117,7 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
           header(Disconnected, msg), onChannel)
         stay()
       } else {
-        log.debug("[MQ][A]  {} queueing message {}", header(Disconnected, msg), onChannel)
+        log.debug("[MQ][A] {} queueing message {}", header(Disconnected, msg), onChannel)
         stay() using InMemory(queue enqueue onChannel)
       }
 
@@ -180,7 +180,7 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
 
   onTermination {
     case StopEvent(_, Connected, Connected(channel)) =>
-      log.debug("[MQ][A]  {} closing channel {}", self.path, channel)
+      log.info("[MQ][A] {} closing channel {}", self.path, channel)
       close(channel)
   }
 
@@ -193,7 +193,8 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
       safe(setupChannel(channel, self)).isDefined
     } catch {
       case NonFatal(throwable) =>
-        log.error("[MQ][A]  {} setup channel callback error {}", self.path,
+        log.warning("[MQ][A] {} recoverable setup channel callback error {}",
+          self.path,
           channel)
         close(channel)
         throw throwable
@@ -206,12 +207,12 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
   }
 
   private def dropChannel(brokenChannel: Channel): Unit = {
-    log.debug("[MQ][A]  {} closing broken channel {}", self.path, brokenChannel)
+    log.info("[MQ][A] {} dropping channel {}", self.path, brokenChannel)
     close(brokenChannel)
   }
 
   private def askForChannel(): Unit = {
-    log.debug("[MQ][A]  {} asking for new channel", self.path)
+    log.info("[MQ][A] {} asking for a new channel", self.path)
     connectionActor ! ProvideChannel
   }
 
