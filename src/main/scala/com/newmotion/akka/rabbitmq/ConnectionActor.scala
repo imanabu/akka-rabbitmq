@@ -68,7 +68,7 @@ class ConnectionActor(
     case Event(Connect, _) =>
       setup().onComplete {
         case Success(Some(connection)) =>
-          log.info("[MQ][A][Disconnected] Success - New Connection Created")
+          log.info(s"[MQ][A] Success - New Connection Created $connection")
           self ! NewConnection(connection)
         case _ =>
           log.error(
@@ -80,7 +80,7 @@ class ConnectionActor(
       stay()
 
     case Event(msg @ NewConnection(connection), _) =>
-      log.info("[MQ][A][Disconnected]  {} setup {} children", header(Disconnected, msg),
+      log.info("[MQ][A][Disconnected] {} setup {} children", header(Disconnected, msg),
         children.size)
       self ! SetupChildren(children)
       goto(Connected) using Connected(connection)
@@ -96,7 +96,7 @@ class ConnectionActor(
     case Event(_: Reconnect, _)          => stay()
 
     case Event(ProvideChannel, _) =>
-      log.error("[MQ][A][Disconnected]  {} can't create channel for {} in " +
+      log.error("[MQ][A][Disconnected] {} Providing a channel for {} in " +
         "disconnected " +
         "state", header(Disconnected, ProvideChannel), sender())
       stay()
@@ -239,17 +239,17 @@ class ConnectionActor(
   private def provideChannel(connection: Connection, sender: ActorRef, msg: Any): Unit =
     Future(blocking(safeCreateChannel(connection))).onComplete {
       case Success(Some(channel)) =>
-        log.info("[MQ][A]  {} channel acquired", header(Connected, msg))
+        log.info("[MQ][A] {} channel acquired", header(Connected, msg))
         sender ! channel
       case _ =>
-        log.error("[MQ][A]  {} no channel acquired. ", header(Connected, msg))
+        log.error("[MQ][A] {} no channel acquired. ", header(Connected, msg))
         self ! Reconnect(connection)
     }
 
   private def safeCreateChannel(connection: Connection): Option[Channel] =
     safe(connection.createChannel()).flatMap { channel =>
       if (channel == null) {
-        log.warning("[MQ][A]  {} no channels available on connection {}", self.path, connection)
+        log.warning("[MQ][A] {} no channels available on connection {}", self.path, connection)
       }
       Option(channel)
     }
