@@ -96,7 +96,7 @@ class ConnectionActor(
     case Event(_: Reconnect, _)          => stay()
 
     case Event(ProvideChannel, _) =>
-      log.error("[MQ][A][Disconnected] {} Providing a channel for {} in " +
+      log.info("[MQ][A][Disconnected] {} Providing a channel for {} in " +
         "disconnected " +
         "state", header(Disconnected, ProvideChannel), sender())
       stay()
@@ -117,7 +117,7 @@ class ConnectionActor(
       // Check the connection id to guard against Reconnect messages
       // still queued in the mailbox during the previous connection.
       if (oldConnection.getId == connection.getId) {
-        log.warning("[MQ][A]  {} reconnect to the same ID {}", header(
+        log.info("[MQ][A]  {} reconnect to the same ID {}", header(
           Connected,
           msg), factory.uri)
         reconnect(connection, msg)
@@ -155,7 +155,8 @@ class ConnectionActor(
       stay()
 
     case Event(msg @ DeadLetter(channel: Channel, `self`, child), _) =>
-      log.warning("[MQ][A]  {} closing channel {} of child {}", header(stateName, msg), channel, child)
+      log.info("[MQ][A]  {} closing channel {} of child {}", header(stateName,
+        msg), channel, child)
       close(channel)
       stay()
 
@@ -165,12 +166,12 @@ class ConnectionActor(
 
   onTransition {
     case Connected -> Disconnected => log.warning("[MQ][A]  {} lost connection to {}", self.path, factory.uri)
-    case Disconnected -> Connected => log.warning("[MQ][A]  {} connected to {}", self.path, factory.uri)
+    case Disconnected -> Connected => log.info("[MQ][A]  {} connected to {}", self.path, factory.uri)
   }
 
   onTermination {
     case StopEvent(_, Connected, Connected(connection)) =>
-      log.warning("[MQ][A]  closing connection to {}", factory.uri)
+      log.info("[MQ][A]  closing connection to {}", factory.uri)
       close(connection)
   }
 
@@ -178,17 +179,17 @@ class ConnectionActor(
 
   private def reconnect(connection: Connection, msg: Any): Unit = {
     def dropConnectionAndNotifyChildren(): Unit = {
-      log.warning("[MQ][A]  {} closing broken connection {}", header(
+      log.info("[MQ][A]  {} closing broken connection {}", header(
         Connected,
         msg), connection)
       close(connection)
 
-      log.warning("[MQ][A]  {} sending shutdown signal to {} children", header(Connected, msg), children.size)
+      log.info("[MQ][A]  {} sending shutdown signal to {} children", header(Connected, msg), children.size)
       children.foreach(_ ! ParentShutdownSignal)
     }
 
     dropConnectionAndNotifyChildren()
-    log.warning("[MQ][A]  {} reconnecting to {} in {}", header(Connected, msg), factory.uri, reconnectionDelay)
+    log.info("[MQ][A]  {} reconnecting to {} in {}", header(Connected, msg), factory.uri, reconnectionDelay)
     startSingleTimer(reconnectTimer, Connect, reconnectionDelay)
   }
 
@@ -249,7 +250,7 @@ class ConnectionActor(
   private def safeCreateChannel(connection: Connection): Option[Channel] =
     safe(connection.createChannel()).flatMap { channel =>
       if (channel == null) {
-        log.warning("[MQ][A] {} no channels available on connection {}", self.path, connection)
+        log.info("[MQ][A] {} no channels available on connection {}", self.path, connection)
       }
       Option(channel)
     }
