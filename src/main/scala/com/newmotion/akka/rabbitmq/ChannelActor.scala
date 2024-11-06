@@ -156,8 +156,8 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
           if (!msg.dropIfNoChannel) {
             log.warning(
               "[MQ][A]  {} Requesting a new channel and retry from " +
-              "memory" +
-              " {}",
+                "memory" +
+                " {}",
               header(Connected, msg), onChannel)
           }
           dropChannelAndRequestNewChannel(channel)
@@ -193,7 +193,8 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
       safe(setupChannel(channel, self)).isDefined
     } catch {
       case NonFatal(throwable) =>
-        log.warning("[MQ][A] {} recoverable setup channel callback error {}",
+        log.warning(
+          "[MQ][A] {} recoverable setup channel callback error {}",
           self.path,
           channel)
         close(channel)
