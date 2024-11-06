@@ -3,6 +3,7 @@ package com.newmotion.akka.rabbitmq
 import akka.actor.{ ActorRef, DeadLetter, FSM, Props }
 
 import concurrent.duration._
+import scala.collection.mutable
 import scala.concurrent.{ ExecutionContext, ExecutionContextExecutor, Future, blocking }
 import scala.util.Success
 import scala.util.control.NonFatal
@@ -44,6 +45,8 @@ object ConnectionActor {
     dispatcher: String = DefaultDispatcherId): Props =
     Props(new ConnectionActor(factory, reconnectionDelay, setupConnection))
       .withDispatcher(dispatcher)
+
+  var actorStates: mutable.Map[String, Boolean] = mutable.Map.empty[String, Boolean]
 }
 
 class ConnectionActor(
@@ -106,8 +109,10 @@ class ConnectionActor(
     case Event(SetupChildren(refs), Connected(connection)) =>
       setupChildren(connection, refs).onComplete {
         case Success(true) =>
+          actorStates(self.path.name) = true
           log.info("[MQ][A][Connected]  {} setup children success", self.path)
         case _ =>
+          actorStates(self.path.name) = false
           log.error("[MQ][A][Connected] {} setup children failed", self.path)
           self ! Reconnect(connection)
       }
@@ -155,7 +160,8 @@ class ConnectionActor(
       stay()
 
     case Event(msg @ DeadLetter(channel: Channel, `self`, child), _) =>
-      log.info("[MQ][A]  {} closing channel {} of child {}", header(stateName,
+      log.info("[MQ][A]  {} closing channel {} of child {}", header(
+        stateName,
         msg), channel, child)
       close(channel)
       stay()
