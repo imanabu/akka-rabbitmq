@@ -1,9 +1,12 @@
 package com.newmotion.akka.rabbitmq
 
-import akka.actor.{ Props, ActorRef, FSM }
+import akka.actor.{ ActorRef, FSM, Props }
+
 import collection.immutable.Queue
 import ConnectionActor.ProvideChannel
+
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 /**
@@ -28,6 +31,8 @@ object ChannelActor {
   private[rabbitmq] case class Retrying(retries: Int, onChannel: OnChannel) extends OnChannel {
     def apply(channel: Channel): Any = onChannel(channel)
   }
+
+  var actorStates: mutable.Map[String, Boolean] = mutable.Map.empty[String, Boolean]
 }
 
 class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
@@ -112,8 +117,9 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
 
     case Event(msg @ ChannelMessage(onChannel, dropIfNoChannel), InMemory(queue)) =>
       if (dropIfNoChannel) {
+        actorStates(self.path.name) = false
         log.error(
-          "[MQ][A] No channel! {} dropping message {}",
+          "[MQ][A] !!!! NO CHANNEL! {} dropping message {} !!!!",
           header(Disconnected, msg), onChannel)
         stay()
       } else {
@@ -139,6 +145,7 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
         case _ => None
       }).fold(stay()) { shutdownAction =>
         log.debug("[MQ][A]  {} shutdown Channel", header(Connected, msg))
+        actorStates(self.path.name) = false
         shutdownAction(channel)
         goto(Disconnected) using InMemory()
       }
@@ -172,14 +179,18 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
   }
 
   onTransition {
-    case Disconnected -> Connected => log.info(
-      "[MQ][A]  {} transition to connected", self.path)
+    case Disconnected -> Connected =>
+      actorStates(self.path.name) = true
+      log.info(
+        "[MQ][A]  {} transition to connected", self.path)
     case Connected -> Disconnected =>
+      actorStates(self.path.name) = false
       log.warning("[MQ][A]  {} transition to disconnected", self.path)
   }
 
   onTermination {
     case StopEvent(_, Connected, Connected(channel)) =>
+      actorStates(self.path.name) = false
       log.info("[MQ][A] {} closing channel {}", self.path, channel)
       close(channel)
   }
@@ -203,6 +214,7 @@ class ChannelActor(setupChannel: (Channel, ActorRef) => Any)
   }
 
   private def dropChannelAndRequestNewChannel(broken: Channel): Unit = {
+    actorStates(self.path.name) = false
     dropChannel(broken)
     askForChannel()
   }
